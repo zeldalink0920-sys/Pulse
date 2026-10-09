@@ -284,7 +284,6 @@ struct RootView: View {
         if onboarded {
             TabView {
                 HomeView().tabItem { Label("Home", systemImage: "house") }
-                BodyView().tabItem { Label("Body", systemImage: "heart") }
                 ChatView().tabItem { Label("Chats", systemImage: "bubble.left") }
                 JournalView().tabItem { Label("Diary", systemImage: "book.closed") }
                 BetweenView().tabItem { Label("Between Us", systemImage: "person.2") }
