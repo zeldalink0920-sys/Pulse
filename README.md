@@ -4,7 +4,13 @@ Native SwiftUI app for iOS 17 or newer. Bottom navigation: Home, Chats, Diary, B
 
 ## Current status
 
-Swift grammar and XcodeGen/GitHub Actions YAML checked locally. IPA packaging validation tests passed. **Xcode compilation, simulator UI tests, and real-device HealthKit verification have not run. No IPA has been built yet.** The current Windows host has no Xcode, and no connected GitHub repository is available for dispatching the macOS workflow.
+The ARM64 iPhone archive and unsigned IPA were successfully built on GitHub's macOS runner. The simulator navigation and persistence test passed. Real-device installation and HealthKit access remain unverified. Chats and Between Us still use local storage.
+
+Build: https://github.com/zeldalink0920-sys/Pulse/actions/runs/37951983946
+
+Download unsigned IPA artifact (ZIP contains Pulse-unsigned.ipa): https://github.com/zeldalink0920-sys/Pulse/actions/runs/37951983946/artifacts/11626575524
+
+The IPA needs valid signing before installation.
 
 ## Build an unsigned IPA without owning a Mac
 
