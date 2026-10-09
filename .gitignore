@@ -1,0 +1,10 @@
+build/
+*.xcodeproj/
+*.xcworkspace/
+*.p12
+*.mobileprovision
+.DS_Store
+
+.tools/
+__pycache__/
+delivery/

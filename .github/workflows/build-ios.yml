@@ -1,0 +1,98 @@
+name: Build iOS
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      CERTIFICATE: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      CERT_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      PROFILE: ${{ secrets.IOS_PROFILE_BASE64 }}
+      TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: |
+          python3 scripts/test-package-ipa.py
+          swift scripts/generate-icon.swift
+          brew install xcodegen
+          xcodegen generate
+      - name: Build unsigned archive
+        if: env.CERTIFICATE == '' || env.PROFILE == '' || env.TEAM_ID == ''
+        run: |
+          xcodebuild -project Pulse.xcodeproj -scheme Pulse -configuration Release -destination 'generic/platform=iOS' -archivePath build/Pulse.xcarchive CODE_SIGNING_ALLOWED=NO archive
+          python3 scripts/package-ipa.py build/Pulse.xcarchive/Products/Applications/Pulse.app build/Pulse-unsigned.ipa
+      - name: Configure signing
+        if: env.CERTIFICATE != '' && env.PROFILE != '' && env.TEAM_ID != ''
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 24)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$PROFILE" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/pulse.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/pulse.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/pulse.keychain-db"
+          security import "$RUNNER_TEMP/distribution.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/pulse.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/pulse.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/pulse.keychain-db"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          python3 scripts/export-options.py "$TEAM_ID" "$PROFILE_UUID" "$RUNNER_TEMP/ExportOptions.plist"
+      - name: Archive and export signed IPA
+        if: env.CERTIFICATE != '' && env.PROFILE != '' && env.TEAM_ID != ''
+        run: |
+          set -euo pipefail
+          xcodebuild -project Pulse.xcodeproj -scheme Pulse -configuration Release -destination 'generic/platform=iOS' -archivePath build/Pulse.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" archive
+          xcodebuild -exportArchive -archivePath build/Pulse.xcarchive -exportPath build/export -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+      - uses: actions/upload-artifact@v4
+        if: env.CERTIFICATE != '' && env.PROFILE != '' && env.TEAM_ID != ''
+        with:
+          name: Pulse-IPA
+          path: build/export/*.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: env.CERTIFICATE == '' || env.PROFILE == '' || env.TEAM_ID == ''
+        with:
+          name: Pulse-unsigned-IPA-REQUIRES-SIGNING
+          path: build/Pulse-unsigned.ipa
+          if-no-files-found: error
+      - name: Remove signing materials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/pulse.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP/ExportOptions.plist"
+          if [ -n "${PROFILE_UUID:-}" ]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi
+
+  verify-ui:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate project and icon
+        run: |
+          swift scripts/generate-icon.swift
+          brew install xcodegen
+          xcodegen generate
+      - name: Test navigation and local persistence
+        run: |
+          set -euo pipefail
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for ds in data["devices"].values() for d in ds if "iPhone" in d["name"]))')
+          xcodebuild -project Pulse.xcodeproj -scheme Pulse -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath build/Pulse-UI.xcresult CODE_SIGNING_ALLOWED=NO test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pulse-UI-test-results
+          path: build/Pulse-UI.xcresult
+          if-no-files-found: warn
