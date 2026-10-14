@@ -55,6 +55,7 @@ final class PulseUITests: XCTestCase {
     }
 
     func testRestaurantSettingsPersistence() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-reset"]
         app.launch()
@@ -70,7 +71,7 @@ final class PulseUITests: XCTestCase {
         let key = app.secureTextFields["restaurant.key"]
         key.tap(); key.typeText("ui-test-placeholder-one")
         app.buttons["restaurant.save"].tap()
-        XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5), app.debugDescription)
         app.buttons["restaurant.add"].tap()
         let secondName = app.textFields["restaurant.name"]
         XCTAssertTrue(secondName.waitForExistence(timeout: 5))

@@ -8,12 +8,12 @@ struct RestaurantConnection: Codable, Identifiable {
 }
 
 enum RestaurantAPIError: LocalizedError {
-    case address, key, credential, redirect, response, unauthorized, forbidden, http(Int), json, tooLarge
+    case address, key, redirect, response, unauthorized, forbidden, http(Int), credential(Int32), json, tooLarge
     var errorDescription: String? {
         switch self {
         case .address: return "请填写有效的 HTTPS 餐馆地址，不要包含账号、查询参数或片段。"
         case .key: return "请填写这家餐馆的 API 密钥。"
-        case .credential: return "密钥无法保存到系统钥匙串，请重试。"
+        case .credential(let code): return "密钥无法保存到系统钥匙串（\(code)），请检查安装签名后重试。"
         case .redirect: return "接口发生重定向，请确认并填写最终的 HTTPS 地址。"
         case .response: return "服务器没有返回有效响应。"
         case .unauthorized: return "密钥无效或已过期（401），请在餐馆后台重新生成。"
@@ -82,8 +82,9 @@ enum RestaurantKeychain {
             var item = query(id)
             item[kSecValueData as String] = data
             item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            guard SecItemAdd(item as CFDictionary, nil) == errSecSuccess else { throw RestaurantAPIError.credential }
-        } else if status != errSecSuccess { throw RestaurantAPIError.credential }
+            let added = SecItemAdd(item as CFDictionary, nil)
+            guard added == errSecSuccess else { throw RestaurantAPIError.credential(added) }
+        } else if status != errSecSuccess { throw RestaurantAPIError.credential(status) }
     }
     static func delete(_ id: UUID) { SecItemDelete(query(id) as CFDictionary) }
 }
