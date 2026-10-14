@@ -53,4 +53,55 @@ final class PulseUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Always close, never far."].waitForExistence(timeout: 5))
     }
+
+    func testRestaurantSettingsPersistence() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-reset"]
+        app.launch()
+        let start = app.buttons["开始感受你的节奏"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        if !start.isHittable { app.swipeUp() }
+        start.tap()
+        app.tabBars.buttons["设置"].tap()
+        app.buttons["restaurant.add"].tap()
+        let name = app.textFields["restaurant.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap(); name.typeText("Restaurant One")
+        let key = app.secureTextFields["restaurant.key"]
+        key.tap(); key.typeText("ui-test-placeholder-one")
+        app.buttons["restaurant.save"].tap()
+        XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
+        app.buttons["restaurant.add"].tap()
+        let secondName = app.textFields["restaurant.name"]
+        XCTAssertTrue(secondName.waitForExistence(timeout: 5))
+        secondName.tap(); secondName.typeText("Restaurant Two")
+        let address = app.textFields["restaurant.address"]
+        address.tap()
+        address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
+        address.typeText("https://order.lydialink.es/r/restaurant-2/api/v1/status")
+        app.secureTextFields["restaurant.key"].tap()
+        app.secureTextFields["restaurant.key"].typeText("ui-test-placeholder-two")
+        app.buttons["restaurant.save"].tap()
+        XCTAssertTrue(app.staticTexts["Restaurant Two"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        app.tabBars.buttons["设置"].tap()
+        XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Restaurant Two"].exists)
+        XCTAssertTrue(app.staticTexts["https://order.lydialink.es/r/restaurant-2"].exists)
+        capture("06-RestaurantSettings", app: app)
+        app.staticTexts["Restaurant Two"].tap()
+        XCTAssertTrue(app.buttons["restaurant.connect"].waitForExistence(timeout: 5))
+        app.buttons["编辑地址与密钥"].tap()
+        XCTAssertTrue(app.textFields["restaurant.name"].waitForExistence(timeout: 5))
+        // A blank edit retains this restaurant's existing Keychain credential.
+        app.buttons["restaurant.save"].tap()
+        XCTAssertTrue(app.buttons["restaurant.connect"].waitForExistence(timeout: 5))
+        app.buttons["删除餐馆"].tap()
+        app.sheets.buttons["删除餐馆"].tap()
+        XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Restaurant Two"].exists)
+    }
+
 }

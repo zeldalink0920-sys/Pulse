@@ -10,7 +10,7 @@ import tree_sitter_swift
 
 parser = Parser(Language(tree_sitter_swift.language()))
 errors = []
-for folder in ['Pulse', 'PulseUITests', 'scripts']:
+for folder in ['Pulse', 'PulseTests', 'PulseUITests', 'scripts']:
     for path in sorted((root / folder).rglob('*.swift')):
         source = path.read_bytes()
         tree = parser.parse(source)
@@ -26,7 +26,7 @@ for folder in ['Pulse', 'PulseUITests', 'scripts']:
             print(f'Syntax OK: {path.relative_to(root)}')
 project = yaml.safe_load((root / 'project.yml').read_text())
 workflow = yaml.safe_load((root / '.github/workflows/build-ios.yml').read_text())
-assert project['schemes']['Pulse']['test']['targets'] == ['PulseUITests']
+assert project['schemes']['Pulse']['test']['targets'] == ['PulseTests', 'PulseUITests']
 assert 'verify-ui' in workflow['jobs']
 assert project['targets']['Pulse']['settings']['base']['CODE_SIGN_ENTITLEMENTS'] == 'Pulse/Pulse.entitlements'
 for target in project['targets'].values():

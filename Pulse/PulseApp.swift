@@ -287,6 +287,7 @@ struct RootView: View {
                 ChatView().tabItem { Label("Chats", systemImage: "bubble.left") }
                 JournalView().tabItem { Label("Diary", systemImage: "book.closed") }
                 BetweenView().tabItem { Label("Between Us", systemImage: "person.2") }
+                AppSettingsView().tabItem { Label("设置", systemImage: "gearshape") }
             }.tint(sage)
         } else {
             WelcomeView {

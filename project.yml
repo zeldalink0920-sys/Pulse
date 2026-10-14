@@ -33,6 +33,16 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: '5.0'
+  PulseTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PulseTests]
+    dependencies:
+      - target: Pulse
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: '5.0'
 schemes:
   Pulse:
     build:
@@ -40,4 +50,4 @@ schemes:
         Pulse: all
 
     test:
-      targets: [PulseUITests]
+      targets: [PulseTests, PulseUITests]
