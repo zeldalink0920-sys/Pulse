@@ -77,8 +77,8 @@ final class PulseUITests: XCTestCase {
         XCTAssertTrue(secondName.waitForExistence(timeout: 5))
         secondName.tap(); secondName.typeText("Restaurant Two")
         let address = app.textFields["restaurant.address"]
+        app.buttons["restaurant.clear-address"].tap()
         address.tap()
-        address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
         address.typeText("https://order.lydialink.es/r/restaurant-2/api/v1/status")
         app.secureTextFields["restaurant.key"].tap()
         app.secureTextFields["restaurant.key"].typeText("ui-test-placeholder-two")
@@ -90,7 +90,7 @@ final class PulseUITests: XCTestCase {
         app.tabBars.buttons["设置"].tap()
         XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Restaurant Two"].exists)
-        XCTAssertTrue(app.staticTexts["https://order.lydialink.es/r/restaurant-2"].exists)
+        XCTAssertTrue(app.staticTexts["https://order.lydialink.es/r/restaurant-2"].exists, app.debugDescription)
         capture("06-RestaurantSettings", app: app)
         app.staticTexts["Restaurant Two"].tap()
         XCTAssertTrue(app.buttons["restaurant.connect"].waitForExistence(timeout: 5))

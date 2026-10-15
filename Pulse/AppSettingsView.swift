@@ -252,9 +252,17 @@ struct RestaurantEditorView: View {
             Form {
                 Section("餐馆信息") {
                     TextField("餐馆名称", text: $name).accessibilityIdentifier("restaurant.name")
-                    TextField("HTTPS 地址", text: $address)
-                        .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .accessibilityIdentifier("restaurant.address")
+                    HStack {
+                        TextField("HTTPS 地址", text: $address)
+                            .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .accessibilityIdentifier("restaurant.address")
+                        if !address.isEmpty {
+                            Button { address = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("清空 API 地址")
+                                .accessibilityIdentifier("restaurant.clear-address")
+                        }
+                    }
                 }
                 Section {
                     SecureField(existing == nil ? "API 密钥" : "留空保留原密钥", text: $key)
