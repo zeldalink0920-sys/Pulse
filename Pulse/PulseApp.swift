@@ -6,6 +6,7 @@ import Charts
 struct PulseApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var health = HealthStore()
+    @StateObject private var restaurants = RestaurantConnections()
     init() {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-testing-reset"), let id = Bundle.main.bundleIdentifier {
@@ -15,7 +16,7 @@ struct PulseApp: App {
     }
     var body: some Scene {
         WindowGroup {
-            RootView().environmentObject(health).preferredColorScheme(.light)
+            RootView().environmentObject(health).environmentObject(restaurants).preferredColorScheme(.light)
                 .task { await health.refreshIfConnected() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await health.refreshIfConnected() } }
@@ -368,6 +369,7 @@ func number(_ value: Double?, decimals: Int = 0) -> String { value.map { String(
 
 struct HomeView: View {
     @EnvironmentObject var health: HealthStore
+    @State private var restaurantRefresh = UUID()
     @AppStorage("profile.name") private var name = ""
     @AppStorage("profile.started") private var started = Date().timeIntervalSince1970
     @AppStorage("onboarded") private var onboarded = false
@@ -390,15 +392,14 @@ struct HomeView: View {
                             Text("A moment for yourself").font(.system(size: 11)).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 8)
-                        Button { Task { await health.connect() } } label: {
+                        Button { restaurantRefresh = UUID() } label: {
                             HStack(spacing: 5) {
-                                if health.busy { ProgressView().controlSize(.mini) } else { Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9)) }
+                                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9))
                                 Text("sync").font(.system(size: 10))
-                                if let date = health.lastRefresh { Text(date, style: .time).font(.system(size: 10)) }
                             }.padding(.horizontal, 10).padding(.vertical, 10)
                                 .background(Color.white.opacity(0.55)).clipShape(Capsule())
                                 .shadow(color: .black.opacity(0.1), radius: 4, y: 3)
-                        }.buttonStyle(.plain).disabled(health.busy).accessibilityLabel("同步健康数据")
+                        }.buttonStyle(.plain).accessibilityLabel("刷新餐厅数据")
                         Button { settings = true } label: {
                             Image(systemName: "gearshape").font(.system(size: 16)).padding(10)
                                 .background(.white.opacity(0.55)).clipShape(Circle())
@@ -430,9 +431,8 @@ struct HomeView: View {
                         }.frame(height: 135).shadow(color: .black.opacity(0.12), radius: 8, y: 4)
                     }.buttonStyle(.plain)
                     HomeMilestones()
-                    Text("YOUR DAILY RHYTHM").font(.system(size: 10)).tracking(3).foregroundStyle(.secondary).padding(.top, 8)
-                    HealthCarousel()
-                    Text(health.status).font(.caption).foregroundStyle(.secondary)
+                    Text("YOUR RESTAURANTS").font(.system(size: 10)).tracking(3).foregroundStyle(.secondary).padding(.top, 8)
+                    RestaurantCarousel(refreshToken: restaurantRefresh)
                 }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 28).frame(maxWidth: 600).frame(maxWidth: .infinity)
             }
             .background(Color(red: 0.925, green: 0.922, blue: 0.909))

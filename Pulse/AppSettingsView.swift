@@ -5,6 +5,18 @@ struct RestaurantConnection: Codable, Identifiable {
     var id: UUID
     var name: String
     var baseURL: String
+    var showOnHome: Bool
+    init(id: UUID, name: String, baseURL: String, showOnHome: Bool = true) {
+        self.id = id; self.name = name; self.baseURL = baseURL; self.showOnHome = showOnHome
+    }
+    private enum CodingKeys: String, CodingKey { case id, name, baseURL, showOnHome }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        baseURL = try values.decode(String.self, forKey: .baseURL)
+        showOnHome = try values.decodeIfPresent(Bool.self, forKey: .showOnHome) ?? true
+    }
 }
 
 enum RestaurantAPIError: LocalizedError {
@@ -92,6 +104,7 @@ enum RestaurantKeychain {
 @MainActor
 final class RestaurantConnections: ObservableObject {
     @Published private(set) var items: [RestaurantConnection]
+    @Published private(set) var revision = UUID()
     private let defaultsKey = "restaurant.connections.v1"
     init() {
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
@@ -110,7 +123,12 @@ final class RestaurantConnections: ObservableObject {
         items.removeAll { $0.id == item.id }
         persist()
     }
+    func move(from offsets: IndexSet, to destination: Int) {
+        items.move(fromOffsets: offsets, toOffset: destination)
+        persist()
+    }
     private func persist() {
+        revision = UUID()
         if let data = try? JSONEncoder().encode(items) { UserDefaults.standard.set(data, forKey: defaultsKey) }
     }
 }
@@ -133,11 +151,24 @@ struct RestaurantResultRow: Identifiable {
 enum RestaurantAPI {
     static func fetch(_ connection: RestaurantConnection, key: String,
                       endpoint: RestaurantEndpoint) async throws -> [RestaurantResultRow] {
+        let data = try await request(connection, key: key, path: endpoint.rawValue)
+        guard let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { throw RestaurantAPIError.json }
+        if endpoint == .printers {
+            let summary = try JSONDecoder().decode(RestaurantStatus.Printers.self, from: data)
+            return [RestaurantResultRow(id: "printer-overall", label: "打印机整体状态", value: summary.overall.rawValue)]
+        }
+        return rows(object, path: "")
+    }
+    static func request(_ connection: RestaurantConnection, key: String, path: String, query: [URLQueryItem] = []) async throws -> Data {
         let base = try RestaurantAddress.normalized(connection.baseURL)
         let token = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty, !token.contains("\n"), !token.contains("\r") else { throw RestaurantAPIError.key }
-        let url = base.appendingPathComponent("api").appendingPathComponent("v1").appendingPathComponent(endpoint.rawValue)
-        var request = URLRequest(url: url)
+        var url = base.appendingPathComponent("api").appendingPathComponent("v1")
+        for part in path.split(separator: "/") { url.appendPathComponent(String(part)) }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { throw RestaurantAPIError.address }
+        if !query.isEmpty { components.queryItems = query }
+        guard let finalURL = components.url else { throw RestaurantAPIError.address }
+        var request = URLRequest(url: finalURL)
         request.httpMethod = "GET"
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -159,10 +190,7 @@ enum RestaurantAPI {
         default: throw RestaurantAPIError.http(http.statusCode)
         }
         guard data.count <= 2_000_000 else { throw RestaurantAPIError.tooLarge }
-        guard let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-            throw RestaurantAPIError.json
-        }
-        return rows(object, path: "")
+        return data
     }
 
     private static let labels = [
@@ -178,6 +206,7 @@ enum RestaurantAPI {
         if let dict = object as? [String: Any], !dict.isEmpty {
             return dict.keys.sorted().flatMap { key -> [RestaurantResultRow] in
                 // Never render credential fields even if a server includes them.
+                if key == "items", path.contains("打印机") { return [] }
                 let lower = key.lowercased()
                 if ["token", "secret", "password", "authorization", "api_key", "apikey"].contains(where: { lower.contains($0) }) { return [] }
                 let title = labels[key] ?? key
@@ -201,7 +230,7 @@ enum RestaurantAPI {
 }
 
 struct AppSettingsView: View {
-    @StateObject private var connections = RestaurantConnections()
+    @EnvironmentObject private var connections: RestaurantConnections
     @State private var adding = false
     var body: some View {
         NavigationStack {
@@ -212,15 +241,16 @@ struct AppSettingsView: View {
                             RestaurantDashboardView(connection: item, connections: connections)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(item.name).font(.headline)
+                                HStack { Text(item.name).font(.headline); if item.showOnHome { Image(systemName: "rectangle.on.rectangle").font(.caption).foregroundStyle(.secondary) } }
                                 Text(item.baseURL).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             }.padding(.vertical, 5)
                         }
                     }
-                    Button { adding = true } label: { Label("添加餐馆 API", systemImage: "plus.circle") }
+                    .onMove { offsets, destination in connections.move(from: offsets, to: destination) }
+                    Button { adding = true } label: { Label("添加餐馆 API / 首页卡片", systemImage: "plus.circle") }
                         .accessibilityIdentifier("restaurant.add")
                 } header: { Text("餐馆 API") } footer: {
-                    Text("每家餐馆单独保存地址和密钥。密钥在餐馆管理员 → 系统设置 → 对外只读 API 中生成。")
+                    Text("新增餐馆默认添加首页卡片，可在编辑餐馆时关闭。点击编辑拖动排序，第一张卡片对应排在最前的餐馆。原有地址和密钥继续保留。")
                 }
                 Section("使用说明") {
                     Text("选择餐馆后可查询全部统计、开台数量、用餐人数和打印机状态。仅发送只读 GET 请求。")
@@ -228,6 +258,7 @@ struct AppSettingsView: View {
                 }.font(.footnote).foregroundStyle(.secondary)
             }
             .navigationTitle("设置")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
             .sheet(isPresented: $adding) { RestaurantEditorView(connections: connections, existing: nil) }
         }
     }
@@ -239,12 +270,14 @@ struct RestaurantEditorView: View {
     let existing: RestaurantConnection?
     @State private var name: String
     @State private var address: String
+    @State private var showOnHome: Bool
     @State private var key = ""
     @State private var error: String?
     init(connections: RestaurantConnections, existing: RestaurantConnection?) {
         self.connections = connections
         self.existing = existing
         _name = State(initialValue: existing?.name ?? "")
+        _showOnHome = State(initialValue: existing?.showOnHome ?? true)
         _address = State(initialValue: existing?.baseURL ?? "https://order.lydialink.es")
     }
     var body: some View {
@@ -263,6 +296,9 @@ struct RestaurantEditorView: View {
                                 .accessibilityIdentifier("restaurant.clear-address")
                         }
                     }
+                }
+                Section("首页卡片") {
+                    Toggle("在首页显示这家餐馆", isOn: $showOnHome).accessibilityIdentifier("restaurant.show-on-home")
                 }
                 Section {
                     SecureField(existing == nil ? "API 密钥" : "留空保留原密钥", text: $key)
@@ -292,7 +328,7 @@ struct RestaurantEditorView: View {
             let token = key.trimmingCharacters(in: .whitespacesAndNewlines)
             let effectiveKey = token.isEmpty ? (existing.flatMap { RestaurantKeychain.read($0.id) } ?? "") : token
             guard !effectiveKey.isEmpty, !effectiveKey.contains("\n"), !effectiveKey.contains("\r") else { throw RestaurantAPIError.key }
-            try connections.save(RestaurantConnection(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), baseURL: url.absoluteString), key: effectiveKey)
+            try connections.save(RestaurantConnection(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), baseURL: url.absoluteString, showOnHome: showOnHome), key: effectiveKey)
             dismiss()
         } catch { self.error = error.localizedDescription }
     }

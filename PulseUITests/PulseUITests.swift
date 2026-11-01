@@ -9,7 +9,7 @@ final class PulseUITests: XCTestCase {
     }
     func testNavigationAndPersistence() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing-reset"]
+        app.launchArguments = ["--ui-testing-reset", "--ui-testing-restaurants"]
         app.launch()
         let start = app.buttons["开始感受你的节奏"]
         XCTAssertTrue(start.waitForExistence(timeout: 10))
@@ -42,7 +42,7 @@ final class PulseUITests: XCTestCase {
         letter.typeText("Always close, never far.")
         app.buttons["完成"].tap()
         app.terminate()
-        app.launchArguments = []
+        app.launchArguments = ["--ui-testing-restaurants"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Diary"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Diary"].tap()
@@ -57,7 +57,7 @@ final class PulseUITests: XCTestCase {
     func testRestaurantSettingsPersistence() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing-reset"]
+        app.launchArguments = ["--ui-testing-reset", "--ui-testing-restaurants"]
         app.launch()
         let start = app.buttons["开始感受你的节奏"]
         XCTAssertTrue(start.waitForExistence(timeout: 10))
@@ -85,7 +85,7 @@ final class PulseUITests: XCTestCase {
         app.buttons["restaurant.save"].tap()
         XCTAssertTrue(app.staticTexts["Restaurant Two"].waitForExistence(timeout: 5))
         app.terminate()
-        app.launchArguments = []
+        app.launchArguments = ["--ui-testing-restaurants"]
         app.launch()
         app.tabBars.buttons["设置"].tap()
         XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
@@ -99,6 +99,26 @@ final class PulseUITests: XCTestCase {
         // A blank edit retains this restaurant's existing Keychain credential.
         app.buttons["restaurant.save"].tap()
         XCTAssertTrue(app.buttons["restaurant.connect"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Home"].tap()
+        for _ in 0..<4 {
+            if app.buttons["restaurant.page.0"].isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["restaurant.page.0"].exists)
+        XCTAssertTrue(app.buttons["restaurant.page.1"].exists)
+        XCTAssertTrue(app.buttons["restaurant.page.2"].exists)
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "restaurant.home.")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        capture("07-RestaurantHome", app: app)
+        card.tap()
+        XCTAssertTrue(app.staticTexts["近 7 天用餐人数"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["restaurant.history.chart"].exists)
+        XCTAssertTrue(app.staticTexts["2026-10-10"].exists)
+        capture("08-RestaurantHistory", app: app)
+        app.buttons["完成"].tap()
+        app.tabBars.buttons["设置"].tap()
+        app.staticTexts["Restaurant Two"].tap()
         app.buttons["删除餐馆"].tap()
         app.sheets.buttons["删除餐馆"].tap()
         XCTAssertTrue(app.staticTexts["Restaurant One"].waitForExistence(timeout: 5))
